@@ -40,7 +40,7 @@ int main()
    else
    {
       std::cout << "Cannot initialiaze a socket\n";
-      std::cout << "Error: " << winsockManager->getErrorMessage() << "\n";
+      std::cout << "Error: " << WinsockManager::getErrorMessage() << "\n";
       winsockManager->cleanup();
       return -1;
    }

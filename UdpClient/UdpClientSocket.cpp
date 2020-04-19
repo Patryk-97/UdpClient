@@ -2,7 +2,7 @@
 
 UdpClientSocket::UdpClientSocket()
 {
-   this->ipProtocol = IpProtocol::UNDEFINED;
+   this->ipProtocol = IpProtocol::IPV4;
    this->socketId = INVALID_SOCKET;
    this->port = 0;
 }
