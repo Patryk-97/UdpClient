@@ -1,33 +1,31 @@
-#include "UdpClientSocket.h"
+#include "UdpServerSocket.h"
 
-UdpClientSocket::UdpClientSocket()
+UdpServerSocket::UdpServerSocket()
 {
    this->ipProtocol = IpProtocol::UNDEFINED;
    this->socketId = INVALID_SOCKET;
-   this->port = 0;
+   this->socketAddr = std::make_unique<sockaddr_in>();
 }
 
-UdpClientSocket::~UdpClientSocket()
+UdpServerSocket::~UdpServerSocket()
 {
    this->reset();
 }
 
-void UdpClientSocket::reset(void)
+void UdpServerSocket::reset(void)
 {
    this->close();
    this->socketId = INVALID_SOCKET;
-   this->port = 0;
+   this->socketAddr.reset(new sockaddr_in());
 }
 
-bool UdpClientSocket::init(IpProtocol ipProtocol)
+bool UdpServerSocket::init(IpProtocol ipProtocol)
 {
    // locals
    int family = AF_INET;
    int type = SOCK_DGRAM;
    int proto = IPPROTO_UDP;
    bool rV = true;
-   std::unique_ptr<sockaddr_in> localSocketAddr = std::make_unique<sockaddr_in>();
-   int localSocketAddrSize = sizeof(localSocketAddr);
 
    if (ipProtocol == IpProtocol::IPV6)
    {
@@ -40,25 +38,29 @@ bool UdpClientSocket::init(IpProtocol ipProtocol)
    {
       rV = false;
    }
+   return rV;
+}
+
+bool UdpServerSocket::bind(const char* address, const uint16_t port)
+{
+   // locals
+   bool rV = true;
+
+   this->fillIpProtocolFamily(this->socketAddr.get());
+   this->fillPort(port, this->socketAddr.get());
+   rV = this->fillNetworkAddressStructure(address, this->socketAddr.get());
 
    if (true == rV &&
-      ::getsockname(this->socketId, (sockaddr*)localSocketAddr.get(),
-         &localSocketAddrSize) == SOCKET_ERROR)
+      ::bind(this->socketId, (sockaddr*)this->socketAddr.get(), sizeof(*this->socketAddr)) == SOCKET_ERROR)
    {
       rV = false;
-   }
-
-   if (true == rV)
-   {
-      this->port = UdpClientSocket::convertPortFromNetworkEndianness(localSocketAddr.get());
-      this->localAddressIp = UdpClientSocket::convertAddressIpToStr(localSocketAddr.get());
    }
 
    return rV;
 }
 
-bool UdpClientSocket::sendTo(const char* address, const uint16_t port,
-   const std::string& sendBuff, int& bytesSend)
+bool UdpServerSocket::sendTo(const std::string& sendBuff, int& bytesSend,
+   const UdpClientSocket* udpClient)
 {
    // locals
    bool rV = true;
@@ -66,40 +68,46 @@ bool UdpClientSocket::sendTo(const char* address, const uint16_t port,
    sockaddr_in socketAddr;
 
    this->fillIpProtocolFamily(&socketAddr);
-   this->fillPort(port, &socketAddr);
-   rV = this->fillNetworkAddressStructure(address, &socketAddr);
+   this->fillPort(udpClient->getPort(), &socketAddr);
+   rV = this->fillNetworkAddressStructure(udpClient->getLocalAddressIp().c_str(), &socketAddr);
 
-   bytesSend = ::sendto(this->socketId, sendBuff.c_str(), sendBuff.length() + 1, 0,
-      (sockaddr*)&socketAddr, sizeof(socketAddr));
-
-   if (bytesSend == SOCKET_ERROR)
+   if (true == rV)
    {
-      rV = false;
+      bytesSend = ::sendto(this->socketId, sendBuff.c_str(), sendBuff.length() + 1, 0,
+         (sockaddr*)&socketAddr, sizeof(socketAddr));
+
+      if (SOCKET_ERROR == bytesSend || 0 == bytesSend)
+      {
+         rV = false;
+      }
    }
 
    return rV;
 }
-int UdpClientSocket::recvFrom(const char* address, const uint16_t port, char* recvBuff,
-   int recvBuffSize)
+UdpClientSocket* UdpServerSocket::recvFrom(char* recvBuff, int recvBuffSize, int& bytesReceived)
 {
    // locals
-   int rV = 0;
+   UdpClientSocket* udpClientSocket = nullptr;
 
    sockaddr_in socketAddr;
    int socketAddrSize = sizeof(socketAddr);
 
-   this->fillIpProtocolFamily(&socketAddr);
-   this->fillPort(port, &socketAddr);
-   rV = this->fillNetworkAddressStructure(address, &socketAddr);
-
    memset(recvBuff, 0, recvBuffSize);
-   rV = ::recvfrom(this->socketId, recvBuff, recvBuffSize, 0,
+   bytesReceived = ::recvfrom(this->socketId, recvBuff, recvBuffSize, 0,
       (sockaddr*)&socketAddr, &socketAddrSize);
 
-   return rV;
+   if (bytesReceived > 0)
+   {
+      udpClientSocket = new UdpClientSocket();
+      udpClientSocket->setPort(UdpServerSocket::convertPortFromNetworkEndianness(&socketAddr));
+      udpClientSocket->setLocalAddressIp(
+         UdpServerSocket::convertAddressIpToStr(&socketAddr).c_str());
+   }
+
+   return udpClientSocket;
 }
 
-void UdpClientSocket::close()
+void UdpServerSocket::close()
 {
    if (this->socketId != INVALID_SOCKET)
    {
@@ -107,7 +115,7 @@ void UdpClientSocket::close()
    }
 }
 
-std::string UdpClientSocket::getIpProtocolStr(void) const
+std::string UdpServerSocket::getIpProtocolStr(void) const
 {
    // locals
    std::string rV;
@@ -116,39 +124,19 @@ std::string UdpClientSocket::getIpProtocolStr(void) const
    return rV;
 }
 
-IpProtocol UdpClientSocket::getIpProtocol(void) const
+IpProtocol UdpServerSocket::getIpProtocol(void) const
 {
    return this->ipProtocol;
 }
 
-void UdpClientSocket::setPort(uint16_t port)
-{
-   this->port = port;
-}
-
-uint16_t UdpClientSocket::getPort(void) const
-{
-   return this->port;
-}
-
-void UdpClientSocket::setLocalAddressIp(const char* localAddressIp)
-{
-   this->localAddressIp = localAddressIp;
-}
-
-std::string UdpClientSocket::getLocalAddressIp(void) const
-{
-   return this->localAddressIp;
-}
-
-void UdpClientSocket::fillAddrInfoCriteria(addrinfo* hints) const
+void UdpServerSocket::fillAddrInfoCriteria(addrinfo* hints) const
 {
    memset(hints, 0, sizeof(*hints));
    hints->ai_socktype = SOCK_DGRAM;
    hints->ai_family = this->ipProtocol == IpProtocol::IPV4 ? AF_INET : AF_INET6;
 }
 
-bool UdpClientSocket::fillNetworkAddressStructure(const char* address, sockaddr_in* socketAddr)
+bool UdpServerSocket::fillNetworkAddressStructure(const char* address, sockaddr_in* socketAddr)
 {
    // locals
    bool rV = true;
@@ -183,12 +171,12 @@ bool UdpClientSocket::fillNetworkAddressStructure(const char* address, sockaddr_
    return rV;
 }
 
-void UdpClientSocket::fillPort(uint16_t port, sockaddr_in* socketAddr)
+void UdpServerSocket::fillPort(uint16_t port, sockaddr_in* socketAddr)
 {
    socketAddr->sin_port = htons(port);
 }
 
-void UdpClientSocket::fillIpProtocolFamily(sockaddr_in* socketAddr)
+void UdpServerSocket::fillIpProtocolFamily(sockaddr_in* socketAddr)
 {
    if (this->ipProtocol == IpProtocol::IPV4)
    {
@@ -200,7 +188,7 @@ void UdpClientSocket::fillIpProtocolFamily(sockaddr_in* socketAddr)
    }
 }
 
-std::string UdpClientSocket::convertAddressIpToStr(const sockaddr_in* socketAddr)
+std::string UdpServerSocket::convertAddressIpToStr(const sockaddr_in* socketAddr)
 {
    // locals
    std::string addressIp = "\"";
@@ -213,7 +201,7 @@ std::string UdpClientSocket::convertAddressIpToStr(const sockaddr_in* socketAddr
    return addressIp;
 }
 
-uint16_t UdpClientSocket::convertPortFromNetworkEndianness(const sockaddr_in* socketAddr)
+uint16_t UdpServerSocket::convertPortFromNetworkEndianness(const sockaddr_in* socketAddr)
 {
    // locals
    uint16_t port = (socketAddr->sin_port & 0xFF00) >> 8 | (socketAddr->sin_port & 0x00FF) << 8;

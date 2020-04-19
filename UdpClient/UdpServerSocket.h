@@ -1,9 +1,10 @@
 #pragma once
 
-#ifndef __UDP_CLIENT_SOCKET_H__
-#define __UDP_CLIENT_SOCKET_H__
+#ifndef __UDP_SERVER_SOCKET_H__
+#define __UDP_SERVER_SOCKET_H__
 
 #include "IpProtocol.h"
+#include "UdpClientSocket.h"
 
 #include <stdint.h>
 #include <string>
@@ -11,25 +12,19 @@
 #include <Ws2tcpip.h>
 #include <memory>
 
-class UdpClientSocket
+class UdpServerSocket
 {
 public:
-   UdpClientSocket();
-   ~UdpClientSocket();
+   UdpServerSocket();
+   ~UdpServerSocket();
    void reset(void);
    bool init(IpProtocol ipProtocol);
-   bool sendTo(const char* address, const uint16_t port, 
-      const std::string& sendBuff, int& bytesSend);
-   int recvFrom(const char* address, const uint16_t port, char* recvBuff, int recvBuffSize);
+   bool bind(const char* address, const uint16_t port);
+   bool sendTo(const std::string& sendBuff, int& bytesSend, const UdpClientSocket* udpClient);
+   UdpClientSocket* recvFrom(char* recvBuff, int recvBuffSize, int& bytesReceived);
    void close(void);
-
    std::string getIpProtocolStr(void) const;
    IpProtocol getIpProtocol(void) const;
-
-   void setPort(uint16_t port);
-   uint16_t getPort(void) const;
-   void setLocalAddressIp(const char* localAddressIp);
-   std::string getLocalAddressIp(void) const;
 
 private:
    void fillAddrInfoCriteria(addrinfo* hints) const;
@@ -42,8 +37,7 @@ private:
 private:
    SOCKET socketId;
    IpProtocol ipProtocol;
-   uint16_t port;
-   std::string localAddressIp;
+   std::unique_ptr<sockaddr_in> socketAddr;
 };
 
-#endif //__UDP_CLIENT_SOCKET_H__
+#endif //__UDP_SERVER_SOCKET_H__
