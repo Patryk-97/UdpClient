@@ -26,7 +26,7 @@ bool UdpClientSocket::init(IpProtocol ipProtocol)
    int type = SOCK_DGRAM;
    int proto = IPPROTO_UDP;
    bool rV = true;
-   std::unique_ptr<sockaddr_in> localSocketAddr = std::make_unique<sockaddr_in>();
+   sockaddr_in localSocketAddr;
    int localSocketAddrSize = sizeof(localSocketAddr);
 
    if (ipProtocol == IpProtocol::IPV6)
@@ -39,19 +39,6 @@ bool UdpClientSocket::init(IpProtocol ipProtocol)
    if (this->socketId == INVALID_SOCKET)
    {
       rV = false;
-   }
-
-   if (true == rV &&
-      ::getsockname(this->socketId, (sockaddr*)localSocketAddr.get(),
-         &localSocketAddrSize) == SOCKET_ERROR)
-   {
-      rV = false;
-   }
-
-   if (true == rV)
-   {
-      this->port = UdpClientSocket::convertPortFromNetworkEndianness(localSocketAddr.get());
-      this->localAddressIp = UdpClientSocket::convertAddressIpToStr(localSocketAddr.get());
    }
 
    return rV;
