@@ -65,7 +65,7 @@ int main()
          }
          else
          {
-            std::cout << "Connection has been terminated\n";
+            std::cout << "Message has not been sent. Server is out.\n";
          }
       }
 
